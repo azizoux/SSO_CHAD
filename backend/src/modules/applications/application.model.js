@@ -102,6 +102,14 @@ const applicationSchema = new mongoose.Schema(
       default: "ACTIVE",
       index: true,
     },
+    backchannelLogoutUri: {
+      type: String,
+      default: null,
+    },
+    backchannelLogoutSessionRequired: {
+      type: Boolean,
+      default: true,
+    },
   },
   {
     timestamps: true,

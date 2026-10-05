@@ -44,6 +44,29 @@ const sessionSchema = new mongoose.Schema(
       default: Date.now,
     },
 
+    participants: {
+      type: [
+        {
+          application: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Application",
+            required: true,
+          },
+
+          clientId: {
+            type: String,
+            required: true,
+          },
+
+          joinedAt: {
+            type: Date,
+            default: Date.now,
+          },
+        },
+      ],
+      default: [],
+    },
+
     expiresAt: {
       type: Date,
       required: true,

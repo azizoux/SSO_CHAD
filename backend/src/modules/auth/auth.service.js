@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import User from "../users/user.model.js";
 
 import * as sessionService from "../sessions/session.service.js";
+import * as refreshTokenService from "../oauth/refreshToken.service.js";
 
 import {
   UnauthorizedError,
@@ -146,5 +147,31 @@ export const login = async ({ matricule, password, ipAddress, userAgent }) => {
       authenticatedAt: session.authenticatedAt,
       expiresAt: session.expiresAt,
     },
+  };
+};
+export const logout = async (sessionToken) => {
+  if (!sessionToken) {
+    return {
+      success: true,
+    };
+  }
+
+  const session = await sessionService.getSessionByToken(sessionToken);
+
+  if (!session) {
+    return {
+      success: true,
+    };
+  }
+
+  await sessionService.revokeSession(sessionToken, "LOGOUT");
+
+  await refreshTokenService.revokeBySession({
+    sessionId: session._id,
+    reason: "SESSION_LOGOUT",
+  });
+
+  return {
+    success: true,
   };
 };

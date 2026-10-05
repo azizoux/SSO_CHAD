@@ -45,6 +45,10 @@ const authorizationCodeSchema = new mongoose.Schema(
       required: true,
       default: [],
     },
+    nonce: {
+      type: String,
+      required: true,
+    },
 
     /**
      * PKCE

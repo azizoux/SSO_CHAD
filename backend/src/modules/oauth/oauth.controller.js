@@ -4,6 +4,8 @@ import asyncHandler from "../../shared/utils/asyncHandler.js";
 
 import { BadRequestError } from "../../shared/errors/index.js";
 
+import { parseCookies } from "../../shared/utils/cookies.js";
+
 /**
  * Authorization Endpoint OAuth 2.x / OpenID Connect.
  *
@@ -15,37 +17,53 @@ import { BadRequestError } from "../../shared/errors/index.js";
  * par un cookie sécurisé HttpOnly.
  */
 export const authorize = asyncHandler(async (req, res) => {
-  const sessionToken = req.get("x-sso-session");
+  const cookies = parseCookies(req.headers.cookie);
 
-  const result = await oauthService.authorize({
-    clientId: req.query.client_id,
+  const headerSessionToken = req.get("x-sso-session");
 
-    redirectUri: req.query.redirect_uri,
+  const cookieSessionToken =
+    cookies[process.env.SSO_COOKIE_NAME || "chad_sso_session"];
 
-    responseType: req.query.response_type,
+  const sessionToken = headerSessionToken || cookieSessionToken || null;
 
-    scope: req.query.scope,
+  try {
+    const result = await oauthService.authorize({
+      clientId: req.query.client_id,
+      redirectUri: req.query.redirect_uri,
+      responseType: req.query.response_type,
+      scope: req.query.scope,
+      state: req.query.state,
+      nonce: req.query.nonce,
+      codeChallenge: req.query.code_challenge,
+      codeChallengeMethod: req.query.code_challenge_method,
+      sessionToken,
+    });
 
-    state: req.query.state,
+    const redirectUrl = new URL(result.redirectUri);
 
-    codeChallenge: req.query.code_challenge,
+    redirectUrl.searchParams.set("code", result.code);
 
-    codeChallengeMethod: req.query.code_challenge_method,
+    if (result.state) {
+      redirectUrl.searchParams.set("state", result.state);
+    }
 
-    sessionToken,
-  });
+    return res.redirect(302, redirectUrl.toString());
+  } catch (error) {
+    if (error.code === "LOGIN_REQUIRED" && !headerSessionToken) {
+      const returnTo = req.originalUrl;
 
-  return res.status(200).json({
-    success: true,
+      const loginUrl = new URL(
+        "/login",
+        `${req.protocol}://${req.get("host")}`,
+      );
 
-    data: {
-      code: result.code,
+      loginUrl.searchParams.set("return_to", returnTo);
 
-      state: result.state,
+      return res.redirect(302, loginUrl.toString());
+    }
 
-      redirectUri: result.redirectUri,
-    },
-  });
+    throw error;
+  }
 });
 
 /**

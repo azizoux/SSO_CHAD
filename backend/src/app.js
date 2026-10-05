@@ -1,4 +1,5 @@
 import express from "express";
+import path from "path";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
@@ -32,7 +33,17 @@ app.use(
   }),
 );
 
-app.use(morgan("dev"));
+app.use(
+  morgan((tokens, req, res) => {
+    return [
+      tokens.method(req, res),
+      req.path,
+      tokens.status(req, res),
+      tokens["response-time"](req, res),
+      "ms",
+    ].join(" ");
+  }),
+);
 
 /**
  * Health check.
@@ -45,6 +56,8 @@ app.get("/api/health", (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+app.use(express.static(path.resolve(process.cwd(), "public")));
 
 /**
  * API V1.
@@ -61,6 +74,12 @@ app.use("/api/v1/oauth", oauthRoutes);
  * publics.
  */
 app.use("/.well-known", oidcRoutes);
+// Endpoint de déconnexion OIDC
+app.use("/api/v1/oidc", oidcRoutes);
+
+app.get("/login", (req, res) => {
+  res.sendFile(path.resolve(process.cwd(), "public/login.html"));
+});
 
 /**
  * Route inexistante.

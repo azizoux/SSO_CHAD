@@ -1,5 +1,3 @@
-import crypto from "crypto";
-
 import Session from "./session.model.js";
 import { generateRandomToken, sha256 } from "../../shared/utils/crypto.js";
 
@@ -108,6 +106,92 @@ export const revokeAllUserSessions = async (
         revokedAt: now,
         revokeReason: reason,
       },
+    },
+  );
+};
+export const revokeBySession = async ({
+  sessionId,
+  reason = "SESSION_REVOKED",
+}) => {
+  if (!sessionId) {
+    return null;
+  }
+
+  const now = new Date();
+
+  return RefreshToken.updateMany(
+    {
+      session: sessionId,
+      status: "ACTIVE",
+    },
+    {
+      $set: {
+        status: "REVOKED",
+        revokedAt: now,
+        revokeReason: reason,
+      },
+    },
+  );
+};
+export const revokeSessionById = async (sessionId, reason = "OIDC_LOGOUT") => {
+  if (!sessionId) return null;
+
+  return Session.findOneAndUpdate(
+    {
+      _id: sessionId,
+      status: "ACTIVE",
+      expiresAt: { $gt: new Date() },
+    },
+    {
+      $set: {
+        status: "REVOKED",
+        revokedAt: new Date(),
+        revokeReason: reason,
+      },
+    },
+    {
+      returnDocument: "after",
+    },
+  );
+};
+export const registerParticipant = async ({
+  sessionId,
+  applicationId,
+  clientId,
+}) => {
+  if (!sessionId || !applicationId || !clientId) {
+    return null;
+  }
+
+  /*
+   * $addToSet empêcherait uniquement les doublons
+   * strictement identiques, joinedAt rendrait chaque
+   * objet différent.
+   *
+   * Nous utilisons donc une mise à jour conditionnelle
+   * sur participants.application.
+   */
+  return Session.findOneAndUpdate(
+    {
+      _id: sessionId,
+      status: "ACTIVE",
+      expiresAt: { $gt: new Date() },
+      "participants.application": { $ne: applicationId },
+    },
+    {
+      $push: {
+        participants: {
+          application: applicationId,
+          clientId,
+          joinedAt: new Date(),
+        },
+      },
+      $set: {
+        lastActivityAt: new Date(),
+      },
+    },
+    {
+      returnDocument: "after",
     },
   );
 };

@@ -41,6 +41,7 @@ export const authorize = async ({
   responseType,
   scope,
   state,
+  nonce,
   codeChallenge,
   codeChallengeMethod,
   sessionToken,
@@ -57,6 +58,10 @@ export const authorize = async ({
       "response_type non supporté",
       "UNSUPPORTED_RESPONSE_TYPE",
     );
+  }
+
+  if (!nonce || typeof nonce !== "string") {
+    throw new BadRequestError("nonce OIDC obligatoire", "OIDC_NONCE_REQUIRED");
   }
 
   /**
@@ -165,6 +170,12 @@ export const authorize = async ({
     throw new ForbiddenError("Utilisateur non autorisé", "USER_NOT_ALLOWED");
   }
 
+  await sessionService.registerParticipant({
+    sessionId: session._id,
+    applicationId: application._id,
+    clientId: application.clientId,
+  });
+
   /**
    * Création du Authorization Code.
    *
@@ -181,6 +192,7 @@ export const authorize = async ({
     redirectUri,
 
     scopes: requestedScopes,
+    nonce,
 
     codeChallenge,
 
@@ -371,12 +383,10 @@ export const exchangeAuthorizationCode = async ({
    */
   const idToken = tokenService.createIdToken({
     user,
-
     application,
-
     scopes: authorizationCode.scopes,
-
     session,
+    nonce: authorizationCode.nonce,
   });
 
   const { refreshToken } = await refreshTokenService.createRefreshToken({

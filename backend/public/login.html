@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>CHAD-SSO — Authentification</title>
+  </head>
+
+  <body>
+    <main>
+      <h1>CHAD-SSO</h1>
+
+      <h2>Authentification gouvernementale</h2>
+
+      <form method="POST" action="/api/v1/auth/browser-login">
+        <input type="hidden" name="return_to" id="return_to" />
+
+        <div>
+          <label for="matricule"> Matricule </label>
+
+          <input
+            id="matricule"
+            name="matricule"
+            type="text"
+            autocomplete="username"
+            required
+          />
+        </div>
+
+        <div>
+          <label for="password"> Mot de passe </label>
+
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            required
+          />
+        </div>
+
+        <button type="submit">Se connecter</button>
+      </form>
+    </main>
+
+    <script src="/js/login.js"></script>
+  </body>
+</html>

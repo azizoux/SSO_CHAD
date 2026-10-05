@@ -16,6 +16,7 @@ export const createAuthorizationCode = async ({
   sessionId,
   redirectUri,
   scopes,
+  nonce,
   codeChallenge,
   codeChallengeMethod,
 }) => {
@@ -31,6 +32,7 @@ export const createAuthorizationCode = async ({
     session: sessionId,
     redirectUri,
     scopes,
+    nonce,
     codeChallenge,
     codeChallengeMethod,
     status: "ACTIVE",
@@ -135,9 +137,7 @@ export const consumeAuthorizationCode = async ({
         usedAt: now,
       },
     },
-    {
-      new: true,
-    },
+    { returnDocument: "after" },
   )
     .populate("application")
     .populate("user")

@@ -109,9 +109,7 @@ export const consumeRefreshToken = async (rawToken) => {
         usedAt: now,
       },
     },
-    {
-      new: true,
-    },
+    { returnDocument: "after" },
   )
     .populate("application")
     .populate("user")
@@ -164,6 +162,29 @@ export const revokeFamily = async ({ familyId, reason }) => {
         status: "REVOKED",
         revokedAt: now,
         revokeReason: reason || "REFRESH_TOKEN_FAMILY_REVOKED",
+      },
+    },
+  );
+};
+
+export const revokeBySession = async ({
+  sessionId,
+  reason = "SESSION_REVOKED",
+}) => {
+  if (!sessionId) return;
+
+  const now = new Date();
+
+  return RefreshToken.updateMany(
+    {
+      session: sessionId,
+      status: "ACTIVE",
+    },
+    {
+      $set: {
+        status: "REVOKED",
+        revokedAt: now,
+        revokeReason: reason,
       },
     },
   );

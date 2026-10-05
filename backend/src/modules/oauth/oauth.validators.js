@@ -19,6 +19,8 @@ export const validateAuthorize = (req, res, next) => {
     redirect_uri,
     response_type,
     scope,
+    state,
+    nonce,
     code_challenge,
     code_challenge_method,
   } = req.query;
@@ -29,6 +31,12 @@ export const validateAuthorize = (req, res, next) => {
     errors.push({
       field: "client_id",
       message: "client_id est obligatoire",
+    });
+  }
+  if (!nonce || typeof nonce !== "string") {
+    errors.push({
+      field: "nonce",
+      message: "nonce est obligatoire",
     });
   }
 
