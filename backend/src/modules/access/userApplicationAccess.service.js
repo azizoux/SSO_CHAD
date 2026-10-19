@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import UserApplicationAccess from "./userApplicationAccess.model.js";
 import User from "../users/user.model.js";
 import Application from "../applications/application.model.js";
+import * as refreshTokenService from "../oauth/refreshToken.service.js";
 
 import { BadRequestError, NotFoundError } from "../../shared/errors/index.js";
 
@@ -211,6 +212,18 @@ export const updateAccess = async ({
     );
   }
 
+  /**
+   * Invalider les refresh tokens après une modification
+   * des autorisations ou de leur durée de validité.
+   */
+  if (roles !== undefined || scopes !== undefined || expiresAt !== undefined) {
+    await refreshTokenService.revokeByUserAndApplication({
+      userId,
+      applicationId,
+      reason: "APPLICATION_ACCESS_UPDATED",
+    });
+  }
+
   return access;
 };
 
@@ -231,6 +244,7 @@ export const suspendAccess = async ({ userId, applicationId }) => {
     },
     {
       returnDocument: "after",
+      runValidators: true,
     },
   );
 
@@ -240,6 +254,12 @@ export const suspendAccess = async ({ userId, applicationId }) => {
       "ACCESS_NOT_FOUND",
     );
   }
+
+  await refreshTokenService.revokeByUserAndApplication({
+    userId,
+    applicationId,
+    reason: "APPLICATION_ACCESS_SUSPENDED",
+  });
 
   return access;
 };
@@ -303,6 +323,7 @@ export const revokeAccess = async ({
     },
     {
       returnDocument: "after",
+      runValidators: true,
     },
   );
 
@@ -310,8 +331,15 @@ export const revokeAccess = async ({
     throw new NotFoundError("Habilitation introuvable", "ACCESS_NOT_FOUND");
   }
 
+  await refreshTokenService.revokeByUserAndApplication({
+    userId,
+    applicationId,
+    reason: "APPLICATION_ACCESS_REVOKED",
+  });
+
   return access;
 };
+
 export const listUserAccesses = async ({ userId }) => {
   validateObjectId(userId, "Utilisateur");
 

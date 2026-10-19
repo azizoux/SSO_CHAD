@@ -553,8 +553,28 @@ export const exchangeRefreshToken = async ({
     );
   }
 
-  if (existing.application?.clientId !== clientId) {
-    throw new UnauthorizedError("Client invalide", "INVALID_CLIENT");
+  /**
+   * Vérification du client associé au Refresh Token.
+   *
+   * Le client doit :
+   * - exister ;
+   * - correspondre au client_id demandé ;
+   * - être toujours ACTIVE.
+   */
+  if (!existing.application || existing.application.clientId !== clientId) {
+    throw new UnauthorizedError("Client OAuth invalide", "INVALID_CLIENT");
+  }
+
+  if (existing.application.status !== "ACTIVE") {
+    await refreshTokenService.revokeFamily({
+      familyId: existing.familyId,
+      reason: "APPLICATION_NOT_ACTIVE",
+    });
+
+    throw new ForbiddenError(
+      "Cette application a été désactivée",
+      "APPLICATION_NOT_ACTIVE",
+    );
   }
 
   /*
@@ -626,6 +646,29 @@ export const exchangeRefreshToken = async ({
     );
   }
 
+  /**
+   * Revérification du statut du client
+   * après consommation atomique.
+   */
+  const currentApplication = await Application.findById(
+    consumed.application?._id,
+  );
+
+  if (!currentApplication || currentApplication.status !== "ACTIVE") {
+    await refreshTokenService.revokeFamily({
+      familyId: consumed.familyId,
+      reason: "APPLICATION_NOT_ACTIVE",
+    });
+
+    throw new ForbiddenError(
+      "Application désactivée ou indisponible",
+      "APPLICATION_NOT_ACTIVE",
+    );
+  }
+
+  // Utiliser ensuite currentApplication pour les
+  // contrôles des scopes et la création des jetons.
+
   /*
    * La session SSO doit toujours être valide.
    */
@@ -666,7 +709,7 @@ export const exchangeRefreshToken = async ({
    */
   const access = await accessService.getActiveAccess({
     userId: consumed.user._id,
-    applicationId: consumed.application._id,
+    applicationId: currentApplication._id,
   });
 
   if (!access) {
@@ -681,14 +724,16 @@ export const exchangeRefreshToken = async ({
     );
   }
 
-  /*
-   * Vérification supplémentaire des scopes.
-   *
-   * Les scopes transportés par le Refresh Token doivent
-   * toujours être couverts par l'habilitation actuelle.
+  /**
+   * Les scopes doivent rester autorisés :
+   * - par l'application ;
+   * - par l'habilitation actuelle.
    */
+
   const unauthorizedScopes = consumed.scopes.filter(
-    (requestedScope) => !access.scopes.includes(requestedScope),
+    (requestedScope) =>
+      !currentApplication.allowedScopes.includes(requestedScope) ||
+      !access.scopes.includes(requestedScope),
   );
 
   if (unauthorizedScopes.length > 0) {
@@ -711,7 +756,7 @@ export const exchangeRefreshToken = async ({
    * création du prochain Refresh Token.
    */
   const replacement = await refreshTokenService.createRefreshToken({
-    application: consumed.application,
+    application: currentApplication,
     user: consumed.user,
     session: consumed.session,
     scopes: consumed.scopes,
@@ -730,7 +775,7 @@ export const exchangeRefreshToken = async ({
    */
   const { accessToken, expiresIn } = tokenService.createAccessToken({
     user: consumed.user,
-    application: consumed.application,
+    application: currentApplication,
     scopes: consumed.scopes,
     session: consumed.session,
     applicationRoles: access.roles,

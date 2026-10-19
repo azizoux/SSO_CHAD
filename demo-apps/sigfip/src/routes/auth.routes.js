@@ -153,6 +153,10 @@ router.get("/callback", async (req, res, next) => {
       throw new Error("Réponse token CHAD-SSO incomplète");
     }
 
+    console.log("************** SIGFIP Tokens ******************");
+    console.log("Token: ", tokens);
+    console.log("********************************");
+
     /*
      * Vérification cryptographique du
      * ID Token avec les clés publiques

@@ -223,3 +223,36 @@ export const revokeAllUserRefreshTokens = async (
     },
   );
 };
+
+/**
+ * Révoque les Refresh Tokens actifs d'un utilisateur
+ * pour une application précise.
+ *
+ * Les accès aux autres applications sont préservés.
+ */
+export const revokeByUserAndApplication = async ({
+  userId,
+  applicationId,
+  reason = "APPLICATION_ACCESS_REVOKED",
+}) => {
+  if (!userId || !applicationId) {
+    throw new Error("userId et applicationId sont obligatoires");
+  }
+
+  const now = new Date();
+
+  return RefreshToken.updateMany(
+    {
+      user: userId,
+      application: applicationId,
+      status: "ACTIVE",
+    },
+    {
+      $set: {
+        status: "REVOKED",
+        revokedAt: now,
+        revokeReason: reason,
+      },
+    },
+  );
+};

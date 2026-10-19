@@ -56,13 +56,10 @@ export const createAccessToken = ({
 
   const payload = {
     sub: user._id.toString(),
-
     client_id: application.clientId,
-
+    token_use: "access",
     scope: scopes.join(" "),
-
     sid: session._id.toString(),
-
     // Rôles propres à l'application cliente.
     // Ne jamais utiliser ici les rôles globaux de CHAD-SSO.
     roles: applicationRoles,
