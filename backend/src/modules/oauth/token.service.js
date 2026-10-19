@@ -45,7 +45,13 @@ export const createLogoutToken = ({ session, application, user }) => {
   });
 };
 
-export const createAccessToken = ({ user, application, scopes, session }) => {
+export const createAccessToken = ({
+  user,
+  application,
+  scopes,
+  session,
+  applicationRoles = [],
+}) => {
   const expiresIn = application.accessTokenLifetime || 900;
 
   const payload = {
@@ -57,18 +63,16 @@ export const createAccessToken = ({ user, application, scopes, session }) => {
 
     sid: session._id.toString(),
 
-    roles: user.roles || [],
+    // Rôles propres à l'application cliente.
+    // Ne jamais utiliser ici les rôles globaux de CHAD-SSO.
+    roles: applicationRoles,
   };
 
   const accessToken = jwt.sign(payload, oidcConfig.privateKey, {
     algorithm: "RS256",
-
     issuer: oidcConfig.issuer,
-
     audience: application.clientId,
-
     expiresIn,
-
     keyid: oidcConfig.keyId,
   });
 

@@ -1,16 +1,13 @@
 import bcrypt from "bcryptjs";
 
 import User from "../users/user.model.js";
-
 import Application from "../applications/application.model.js";
 
 import * as sessionService from "../sessions/session.service.js";
-
 import * as authorizationCodeService from "./authorizationCode.service.js";
-
 import * as tokenService from "./token.service.js";
-
 import * as refreshTokenService from "./refreshToken.service.js";
+import * as accessService from "../access/userApplicationAccess.service.js";
 
 import {
   BadRequestError,
@@ -170,6 +167,52 @@ export const authorize = async ({
     throw new ForbiddenError("Utilisateur non autorisé", "USER_NOT_ALLOWED");
   }
 
+  /**
+   * Vérification de l'habilitation de l'utilisateur
+   * pour l'application cliente.
+   *
+   * Une session SSO valide ne signifie pas automatiquement
+   * que l'utilisateur est autorisé à accéder à toutes
+   * les applications raccordées à CHAD-SSO.
+   */
+  const access = await accessService.getActiveAccess({
+    userId: session.user._id,
+    applicationId: application._id,
+  });
+
+  if (!access) {
+    throw new ForbiddenError(
+      "Utilisateur non habilité à accéder à cette application",
+      "APPLICATION_ACCESS_DENIED",
+    );
+  }
+
+  /**
+   * Les scopes doivent être autorisés à deux niveaux :
+   *
+   * 1. par l'application ;
+   * 2. par l'habilitation de l'utilisateur.
+   *
+   * La première vérification a déjà été effectuée plus haut.
+   */
+  const unauthorizedAccessScopes = requestedScopes.filter(
+    (requestedScope) => !access.scopes.includes(requestedScope),
+  );
+
+  if (unauthorizedAccessScopes.length > 0) {
+    throw new ForbiddenError(
+      `Scopes non autorisés pour cet utilisateur : ${unauthorizedAccessScopes.join(", ")}`,
+      "ACCESS_SCOPE_DENIED",
+      {
+        unauthorizedScopes: unauthorizedAccessScopes,
+      },
+    );
+  }
+
+  /**
+   * L'application devient participante à la session SSO
+   * uniquement après validation de son habilitation.
+   */
   await sessionService.registerParticipant({
     sessionId: session._id,
     applicationId: application._id,
@@ -349,6 +392,13 @@ export const exchangeAuthorizationCode = async ({
 
   const session = authorizationCode.session;
 
+  if (!user || user.status !== "ACTIVE") {
+    throw new ForbiddenError(
+      "Compte utilisateur suspendu ou désactivé",
+      "USER_NOT_ALLOWED",
+    );
+  }
+
   /**
    * La session SSO associée au code
    * doit toujours être valide au moment
@@ -365,17 +415,39 @@ export const exchangeAuthorizationCode = async ({
     );
   }
 
+  const access = await accessService.getActiveAccess({
+    userId: user._id,
+    applicationId: application._id,
+  });
+
+  if (!access) {
+    throw new ForbiddenError(
+      "Utilisateur non habilité à accéder à cette application",
+      "APPLICATION_ACCESS_DENIED",
+    );
+  }
+
+  const unauthorizedScopes = authorizationCode.scopes.filter(
+    (scope) => !access.scopes.includes(scope),
+  );
+
+  if (unauthorizedScopes.length > 0) {
+    throw new ForbiddenError(
+      "Scopes non autorisés pour cet utilisateur",
+      "ACCESS_SCOPE_DENIED",
+      { unauthorizedScopes },
+    );
+  }
+
   /**
    * Access Token signé RS256.
    */
   const { accessToken, expiresIn } = tokenService.createAccessToken({
     user,
-
     application,
-
     scopes: authorizationCode.scopes,
-
     session,
+    applicationRoles: access.roles,
   });
 
   /**
@@ -548,17 +620,8 @@ export const exchangeRefreshToken = async ({
   const consumed = await refreshTokenService.consumeRefreshToken(refreshToken);
 
   if (!consumed) {
-    const current = await refreshTokenService.findRefreshToken(refreshToken);
-
-    if (current?.status === "USED") {
-      throw new UnauthorizedError(
-        "Refresh Token déjà utilisé",
-        "REFRESH_TOKEN_ALREADY_USED",
-      );
-    }
-
     throw new UnauthorizedError(
-      "Refresh Token invalide, expiré ou révoqué",
+      "Refresh Token déjà consommé, expiré ou révoqué",
       "INVALID_REFRESH_TOKEN",
     );
   }
@@ -571,14 +634,76 @@ export const exchangeRefreshToken = async ({
     consumed.session.status !== "ACTIVE" ||
     consumed.session.expiresAt <= new Date()
   ) {
+    await refreshTokenService.revokeFamily({
+      familyId: consumed.familyId,
+      reason: "INVALID_SSO_SESSION",
+    });
+
     throw new UnauthorizedError(
       "Session SSO invalide ou expirée",
       "INVALID_SSO_SESSION",
     );
   }
 
+  /*
+   * L'utilisateur doit toujours être actif.
+   */
   if (!consumed.user || consumed.user.status !== "ACTIVE") {
+    await refreshTokenService.revokeFamily({
+      familyId: consumed.familyId,
+      reason: "USER_NOT_ALLOWED",
+    });
+
     throw new ForbiddenError("Utilisateur non autorisé", "USER_NOT_ALLOWED");
+  }
+
+  /*
+   * L'habilitation applicative doit toujours être active.
+   *
+   * Une authentification SSO valide ne suffit pas :
+   * l'utilisateur doit encore être habilité pour
+   * l'application qui demande le renouvellement.
+   */
+  const access = await accessService.getActiveAccess({
+    userId: consumed.user._id,
+    applicationId: consumed.application._id,
+  });
+
+  if (!access) {
+    await refreshTokenService.revokeFamily({
+      familyId: consumed.familyId,
+      reason: "APPLICATION_ACCESS_DENIED",
+    });
+
+    throw new ForbiddenError(
+      "L'habilitation de l'utilisateur pour cette application n'est plus active",
+      "APPLICATION_ACCESS_DENIED",
+    );
+  }
+
+  /*
+   * Vérification supplémentaire des scopes.
+   *
+   * Les scopes transportés par le Refresh Token doivent
+   * toujours être couverts par l'habilitation actuelle.
+   */
+  const unauthorizedScopes = consumed.scopes.filter(
+    (requestedScope) => !access.scopes.includes(requestedScope),
+  );
+
+  if (unauthorizedScopes.length > 0) {
+    await refreshTokenService.revokeFamily({
+      familyId: consumed.familyId,
+      reason: "ACCESS_SCOPE_DENIED",
+    });
+
+    throw new ForbiddenError(
+      `Scopes non autorisés pour cet utilisateur : ${unauthorizedScopes.join(", ")}`,
+      "ACCESS_SCOPE_DENIED",
+      {
+        unauthorizedScopes,
+      },
+    );
   }
 
   /*
@@ -587,15 +712,10 @@ export const exchangeRefreshToken = async ({
    */
   const replacement = await refreshTokenService.createRefreshToken({
     application: consumed.application,
-
     user: consumed.user,
-
     session: consumed.session,
-
     scopes: consumed.scopes,
-
     familyId: consumed.familyId,
-
     parentTokenId: consumed._id,
   });
 
@@ -608,23 +728,18 @@ export const exchangeRefreshToken = async ({
   /*
    * Nouvel Access Token.
    */
-  const { accessToken, expiresIn } = await tokenService.createAccessToken({
+  const { accessToken, expiresIn } = tokenService.createAccessToken({
     user: consumed.user,
-
     application: consumed.application,
-
     scopes: consumed.scopes,
-
     session: consumed.session,
+    applicationRoles: access.roles,
   });
 
   return {
     accessToken,
-
     refreshToken: replacement.refreshToken,
-
     expiresIn,
-
     scopes: consumed.scopes,
   };
 };

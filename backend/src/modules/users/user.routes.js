@@ -1,4 +1,5 @@
 import express from "express";
+import { requireSuperAdmin } from "../admin/adminAuth.middleware.js";
 
 import {
   createUser,
@@ -10,6 +11,7 @@ import {
 } from "./user.controller.js";
 
 const router = express.Router();
+router.use(requireSuperAdmin);
 
 /**
  * POST /api/v1/users

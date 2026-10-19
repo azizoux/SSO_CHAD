@@ -109,30 +109,30 @@ export const revokeAllUserSessions = async (
     },
   );
 };
-export const revokeBySession = async ({
-  sessionId,
-  reason = "SESSION_REVOKED",
-}) => {
-  if (!sessionId) {
-    return null;
-  }
+// export const revokeBySession = async ({
+//   sessionId,
+//   reason = "SESSION_REVOKED",
+// }) => {
+//   if (!sessionId) {
+//     return null;
+//   }
 
-  const now = new Date();
+//   const now = new Date();
 
-  return RefreshToken.updateMany(
-    {
-      session: sessionId,
-      status: "ACTIVE",
-    },
-    {
-      $set: {
-        status: "REVOKED",
-        revokedAt: now,
-        revokeReason: reason,
-      },
-    },
-  );
-};
+//   return RefreshToken.updateMany(
+//     {
+//       session: sessionId,
+//       status: "ACTIVE",
+//     },
+//     {
+//       $set: {
+//         status: "REVOKED",
+//         revokedAt: now,
+//         revokeReason: reason,
+//       },
+//     },
+//   );
+// };
 export const revokeSessionById = async (sessionId, reason = "OIDC_LOGOUT") => {
   if (!sessionId) return null;
 

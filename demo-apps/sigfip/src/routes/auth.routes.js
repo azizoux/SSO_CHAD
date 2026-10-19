@@ -73,10 +73,6 @@ router.get("/login", (req, res, next) => {
       codeChallenge,
     });
 
-    console.log("************** --- authorizationUrl --- **************");
-    console.log("authorizationUrl: ", authorizationUrl);
-    console.log("************** --- END --- **************");
-
     /*
      * Sauvegardons explicitement la session
      * avant de quitter SIGFIP.

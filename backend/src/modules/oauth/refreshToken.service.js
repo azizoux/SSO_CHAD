@@ -189,3 +189,37 @@ export const revokeBySession = async ({
     },
   );
 };
+/**
+ * Révoque tous les Refresh Tokens actifs
+ * appartenant à un utilisateur.
+ *
+ * Utilisé lors de :
+ * - suspension du compte
+ * - désactivation du compte
+ * - incident de sécurité
+ * - révocation administrative globale
+ */
+export const revokeAllUserRefreshTokens = async (
+  userId,
+  reason = "USER_SESSIONS_REVOKED",
+) => {
+  if (!userId) {
+    throw new Error("userId obligatoire");
+  }
+
+  const now = new Date();
+
+  return RefreshToken.updateMany(
+    {
+      user: userId,
+      status: "ACTIVE",
+    },
+    {
+      $set: {
+        status: "REVOKED",
+        revokedAt: now,
+        revokeReason: reason,
+      },
+    },
+  );
+};

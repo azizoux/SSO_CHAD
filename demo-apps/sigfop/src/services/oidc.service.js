@@ -75,15 +75,45 @@ export const exchangeAuthorizationCode = async ({ code, codeVerifier }) => {
   const data = await response.json();
 
   if (!response.ok) {
-    const error = new Error(
-      data?.error?.message ||
-        data?.error_description ||
-        "Échec de l'échange du code OAuth",
+    throw new Error(
+      `Échec échange Authorization Code : ${JSON.stringify(data)}`,
+    );
+  }
+
+  // TEST LOCAL UNIQUEMENT : sauvegarder le Refresh Token
+  if (data.refresh_token) {
+    const fs = await import("node:fs/promises");
+
+    await fs.writeFile(
+      "/tmp/chad-sso-sigfop-refresh-token",
+      data.refresh_token,
+      { mode: 0o600 },
+    );
+    console.log("============ sauvegarde du Refresh Token ===============");
+  }
+
+  // TEST TEMPORAIRE : inspection des rôles du JWT
+  if (data.access_token) {
+    const payload = JSON.parse(
+      Buffer.from(data.access_token.split(".")[1], "base64url").toString(
+        "utf8",
+      ),
     );
 
-    error.code = data?.error?.code || data?.error || "TOKEN_EXCHANGE_FAILED";
-
-    throw error;
+    console.log("=== ACCESS TOKEN SIGFOP - TEST UNIQUEMENT ===");
+    console.log(
+      JSON.stringify(
+        {
+          client_id: payload.client_id,
+          roles: payload.roles,
+          scope: payload.scope,
+          sid_present: Boolean(payload.sid),
+        },
+        null,
+        2,
+      ),
+    );
+    console.log("===========================================");
   }
 
   return data;

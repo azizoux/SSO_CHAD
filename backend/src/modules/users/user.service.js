@@ -86,6 +86,8 @@ export const createUser = async (data) => {
   return user;
 };
 
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 export const getUsers = async ({
   page = 1,
   limit = 20,
@@ -99,7 +101,8 @@ export const getUsers = async ({
 
   const filter = {};
 
-  if (search) {
+  if (typeof search === "string" && search.trim()) {
+    search = escapeRegex(search.trim().slice(0, 100));
     filter.$or = [
       {
         matricule: {

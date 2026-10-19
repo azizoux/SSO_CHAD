@@ -8,8 +8,10 @@ import {
   getOrganizations,
   updateOrganization,
 } from "./organization.controller.js";
+import { requireSuperAdmin } from "../admin/adminAuth.middleware.js";
 
 const router = express.Router();
+router.use(requireSuperAdmin);
 
 /**
  * POST /api/v1/organizations
